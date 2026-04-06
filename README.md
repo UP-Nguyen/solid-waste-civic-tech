@@ -14,7 +14,7 @@ complaint hotspots
 complaints per capita
 repeat complaints over time
 A simple dashboard in Streamlit or Plotly Dash
-
+0
 
 What goes where:
 
@@ -35,3 +35,12 @@ pip install -r requirements.txt
 python src/extract_311.py
 python src/build_features.py
 streamlit run app/streamlit_app.py
+
+
+# NOTES
+map? Tableau? 
+Track basic performance metrics
+Animated map/scrollable that shows
+
+1 map that identifies still visual
+Another map that shows how persistent/systemic patterns
