@@ -14,3 +14,24 @@ complaint hotspots
 complaints per capita
 repeat complaints over time
 A simple dashboard in Streamlit or Plotly Dash
+
+
+What goes where:
+
+Raw downloaded data gets written to data/raw/
+Processed aggregated files go to data/processed/
+Python pipeline scripts live in src/
+The dashboard lives in app/
+
+
+How to run:
+
+# From root folder 
+python -m venv .venv
+source .venv/bin/activate   # Mac/Linux
+pip install -r requirements.txt
+
+
+python src/extract_311.py
+python src/build_features.py
+streamlit run app/streamlit_app.py
