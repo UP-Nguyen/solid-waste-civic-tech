@@ -44,3 +44,16 @@ Animated map/scrollable that shows
 
 1 map that identifies still visual
 Another map that shows how persistent/systemic patterns
+
+#4/13/26
+1. Animated choropleth of complaints per 1,000 residents 
+2. Animated scatterplot of complaints per capita vs median income
+- This supports the equity framing without making causal claims. 
+3. Animated ranking chart of top community districts by repeat complaint burden 
+ -This helps define “persistent inefficiency” more concretely.
+
+from main folder to run
+python src/extract_311.py
+python src/build_features.py
+python src/merge_demo.py
+streamlit run app/animated_visuals.py
