@@ -69,7 +69,7 @@ with col1:
         color="borough",
         title="Top 15 Community Boards by Complaints",
     )
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
 
 with col2:
     trend = (
@@ -85,10 +85,10 @@ with col2:
         markers=True,
         title="Monthly Complaint Trend",
     )
-    st.plotly_chart(fig_line, use_container_width=True)
+    st.plotly_chart(fig_line, width="stretch")
 
 st.subheader("Neighborhood summary")
-st.dataframe(summary, use_container_width=True)
+st.dataframe(summary, width="stretch")
 
 if "complaints_per_1000" in filtered.columns:
     st.subheader("Complaints per 1,000 residents")
@@ -97,4 +97,4 @@ if "complaints_per_1000" in filtered.columns:
         .mean()
         .sort_values("complaints_per_1000", ascending=False)
     )
-    st.dataframe(per_capita, use_container_width=True)
+    st.dataframe(per_capita, width="stretch")
