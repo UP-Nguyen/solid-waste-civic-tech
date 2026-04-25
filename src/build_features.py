@@ -1,12 +1,15 @@
-"""Consolidate cleaned 311 data into a dashboard-ready monthly feature table."""
+"""Aggregate cleaned 311 data into a dashboard-ready monthly feature table."""
 
 import pandas as pd
 
 from config import RAW_311_FILE, FEATURE_FILE
 
-#Flag repeated complaint descriptors within the same geography-month.
-def add_repeat_flags(df: pd.DataFrame) -> pd.DataFrame:
 
+def add_repeat_flags(df: pd.DataFrame) -> pd.DataFrame:
+    """Flag repeated complaint descriptors within the same geography-month.
+
+    This is a simple first-pass proxy, not a canonical measure of repeat incidents.
+    """
     df = df.copy()
     key_cols = ["month", "borough", "community_board", "complaint_type", "descriptor"]
     counts = (

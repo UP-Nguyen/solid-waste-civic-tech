@@ -57,3 +57,15 @@ python src/extract_311.py
 python src/build_features.py
 python src/merge_demo.py
 streamlit run app/animated_visuals.py
+
+community district code
+total population
+median household income
+
+# 4/25/26
+pip install -r requirements.txt
+python src/extract_311.py
+python src/build_features.py
+python src/merge_demo.py          # optional but recommended
+python src/build_dashboard_data.py
+streamlit run app/explorer.py

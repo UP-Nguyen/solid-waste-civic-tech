@@ -1,103 +1,171 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
+import plotly.express as px
 import streamlit as st
 
-from sanitation_explorer.data import (
-    build_map_frame,
-    build_overview,
-    build_type_trend,
-    format_metric_label,
-    load_dashboard_data,
-    load_geojson,
-    month_sort_key,
-)
-from sanitation_explorer.maps import render_map
-from sanitation_explorer.sections import (
-    render_drilldown,
-    render_ranking,
-    render_summary_metrics,
-    render_trends,
+BASE_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = BASE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.append(str(SRC_DIR))
+
+from viz_utils import (  # noqa: E402
+    COMMUNITY_DISTRICT_GEOJSON,
+    load_community_district_geojson,
+    load_main_dataset,
+    summarize_for_choropleth,
+    summarize_for_ranking,
+    summarize_for_scatter,
 )
 
-
-st.set_page_config(page_title="NYC Sanitation Burden Explorer", layout="wide")
-st.title("NYC Sanitation Burden Explorer")
+st.set_page_config(page_title="NYC Sanitation Animated Visuals", layout="wide")
+st.title("NYC Sanitation Animated Visuals")
 st.caption(
-    "Akbar's interactive tool for exploring sanitation-related 311 burden across NYC community districts."
+    "Three animation-ready views for the v1 solid waste civic tech prototype. "
+    "These charts are designed for month-by-month change over time."
 )
 
 try:
-    df = load_dashboard_data()
-except FileNotFoundError as exc:
-    st.error(str(exc))
+    df = load_main_dataset(prefer_merged=True)
+except FileNotFoundError as e:
+    st.error(str(e))
     st.stop()
-
-has_demo = "complaints_per_1000" in df.columns
-months = sorted(df["month"].dropna().unique(), key=month_sort_key)
-complaint_options = sorted(df["complaint_type"].dropna().unique())
-borough_options = sorted(df["borough"].dropna().unique())
 
 st.sidebar.header("Filters")
-selected_types = st.sidebar.multiselect("Complaint types", complaint_options, default=complaint_options)
-selected_boroughs = st.sidebar.multiselect("Boroughs", borough_options, default=borough_options)
-selected_months = st.sidebar.select_slider("Month range", options=months, value=(months[0], months[-1]))
-
-metric_options = ["complaints", "repeat_descriptor_complaints", "open_cases", "avg_response_hours"]
-if has_demo:
-    metric_options.insert(1, "complaints_per_1000")
-    metric_options.insert(3, "repeat_descriptor_per_1000")
-metric = st.sidebar.radio("Map metric", metric_options, index=0, format_func=format_metric_label)
-
-map_mode = st.sidebar.radio("Map style", ["2D", "3D"], index=0)
-show_animation = st.sidebar.checkbox("Show animated map", value=True)
-extrusion_scale = st.sidebar.slider("3D height scale", min_value=0.5, max_value=3.0, value=1.6, step=0.1)
+complaint_options = sorted(df["complaint_type"].dropna().astype(str).unique()) if "complaint_type" in df.columns else []
+selected_types = st.sidebar.multiselect(
+    "Complaint types",
+    complaint_options,
+    default=complaint_options,
+)
+borough_options = sorted(df["borough"].dropna().astype(str).unique()) if "borough" in df.columns else []
+selected_boroughs = st.sidebar.multiselect(
+    "Boroughs",
+    borough_options,
+    default=borough_options,
+)
 
 filtered = df.copy()
-if selected_types:
-    filtered = filtered[filtered["complaint_type"].isin(selected_types)]
-if selected_boroughs:
-    filtered = filtered[filtered["borough"].isin(selected_boroughs)]
-
-start_month, end_month = selected_months
-filtered = filtered[(filtered["month"] >= start_month) & (filtered["month"] <= end_month)]
+if selected_types and "complaint_type" in filtered.columns:
+    filtered = filtered[filtered["complaint_type"].astype(str).isin(selected_types)]
+if selected_boroughs and "borough" in filtered.columns:
+    filtered = filtered[filtered["borough"].astype(str).isin(selected_boroughs)]
 
 if filtered.empty:
-    st.warning("No data remains after the current filters.")
+    st.warning("No data remains after filtering.")
     st.stop()
 
-overview = build_overview(filtered)
-type_trend = build_type_trend(filtered)
-map_df = build_map_frame(filtered, metric)
-available_map_months = sorted(map_df["month"].unique(), key=month_sort_key)
-selected_map_month = st.sidebar.selectbox(
-    "Focused month",
-    available_map_months,
-    index=len(available_map_months) - 1,
-)
-month_slice = map_df[map_df["month"] == selected_map_month].copy()
+# 1. Animated choropleth
+st.subheader("1) Animated choropleth of complaints per 1,000 residents")
+try:
+    geojson = load_community_district_geojson()
+    choro_df = summarize_for_choropleth(filtered)
+    metric_col = "complaints_per_1000" if "complaints_per_1000" in choro_df.columns else "complaints"
+    hover_data = {
+        "community_board": True,
+        "borough": True,
+        "complaints": True,
+        metric_col: ':.2f' if metric_col == 'complaints_per_1000' else True,
+        "boro_cd": False,
+    }
+    fig_choro = px.choropleth_mapbox(
+        choro_df,
+        geojson=geojson,
+        locations="boro_cd",
+        featureidkey="properties.boro_cd",
+        color=metric_col,
+        animation_frame="month",
+        hover_name="community_board",
+        hover_data=hover_data,
+        mapbox_style="carto-positron",
+        center={"lat": 40.7128, "lon": -74.0060},
+        zoom=8.8,
+        opacity=0.75,
+        color_continuous_scale="YlOrRd",
+        title="Community district sanitation burden over time",
+    )
+    fig_choro.update_layout(margin=dict(l=0, r=0, t=50, b=0), height=650)
+    st.plotly_chart(fig_choro, use_container_width=True)
+except FileNotFoundError:
+    st.info(
+        "To render the choropleth, add a community district geojson file at "
+        f"`{COMMUNITY_DISTRICT_GEOJSON}` with a `properties.boro_cd` field."
+    )
+except Exception as e:
+    st.error(f"Could not build choropleth: {e}")
 
-render_summary_metrics(filtered, available_map_months, overview)
+# 2. Animated scatterplot
+st.subheader("2) Animated scatterplot of complaints per capita vs median income")
+try:
+    scatter_df = summarize_for_scatter(filtered)
+    size_col = "population" if "population" in scatter_df.columns else None
+    color_col = "borough" if "borough" in scatter_df.columns else None
+    hover_data = {
+        "community_board": True,
+        "complaints": True,
+        "complaints_per_1000": ':.2f',
+    }
+    if "pct_repeat_descriptor" in scatter_df.columns:
+        hover_data["pct_repeat_descriptor"] = ':.2%'
 
-map_col, rank_col = st.columns([1.8, 1.0])
-with map_col:
-    st.subheader("Burden Map")
-    try:
-        geojson = load_geojson()
-        render_map(
-            geojson=geojson,
-            map_df=map_df,
-            month_slice=month_slice,
-            metric=metric,
-            map_mode=map_mode,
-            show_animation=show_animation,
-            extrusion_scale=extrusion_scale,
-            selected_map_month=selected_map_month,
-        )
-    except FileNotFoundError as exc:
-        st.info(str(exc))
+    fig_scatter = px.scatter(
+        scatter_df,
+        x="median_income",
+        y="complaints_per_1000",
+        animation_frame="month",
+        animation_group="community_board",
+        size=size_col,
+        color=color_col,
+        hover_name="community_board",
+        hover_data=hover_data,
+        title="Complaints per 1,000 residents vs. median income",
+        labels={
+            "median_income": "Median household income",
+            "complaints_per_1000": "Complaints per 1,000 residents",
+        },
+        height=650,
+    )
+    fig_scatter.update_traces(marker=dict(sizemode="area", sizemin=6))
+    fig_scatter.update_layout(margin=dict(l=20, r=20, t=50, b=20))
+    st.plotly_chart(fig_scatter, use_container_width=True)
+except Exception as e:
+    st.info(str(e))
 
-with rank_col:
-    render_ranking(month_slice, metric, selected_map_month)
-
-render_trends(overview, type_trend)
-render_drilldown(filtered, overview)
+# 3. Animated ranking chart
+st.subheader("3) Animated ranking chart of top community districts by repeat complaint burden")
+try:
+    ranking_df = summarize_for_ranking(filtered)
+    top_n = st.slider("Top N districts per month", min_value=5, max_value=20, value=10)
+    metric_col = "repeat_burden_per_1000"
+    plot_df = ranking_df[ranking_df["rank_within_month"] <= top_n].copy()
+    plot_df["community_board_label"] = (
+        plot_df["community_board"].astype(str) + " (" + plot_df["borough"].astype(str) + ")"
+    )
+    fig_rank = px.bar(
+        plot_df,
+        x=metric_col,
+        y="community_board_label",
+        color="borough",
+        animation_frame="month",
+        orientation="h",
+        hover_name="community_board",
+        hover_data={
+            "repeat_descriptor_complaints": True,
+            "complaints": True,
+            "repeat_burden_share": ':.2%',
+            metric_col: ':.2f',
+            "community_board_label": False,
+        },
+        title="Top districts by repeat complaint burden over time",
+        labels={
+            metric_col: "Repeat complaint burden per 1,000" if "population" in plot_df.columns else "Repeat complaint burden",
+            "community_board_label": "Community district",
+        },
+        height=650,
+    )
+    fig_rank.update_layout(yaxis={"categoryorder": "total ascending"}, margin=dict(l=20, r=20, t=50, b=20))
+    st.plotly_chart(fig_rank, use_container_width=True)
+except Exception as e:
+    st.error(f"Could not build ranking chart: {e}")
