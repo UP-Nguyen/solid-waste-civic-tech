@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import copy
-import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import folium
 import numpy as np
@@ -23,6 +22,7 @@ PROCESSED_DIR = BASE_DIR / "data" / "processed"
 MERGED_FILE = PROCESSED_DIR / "neighborhood_month_with_demo.parquet"
 AGG_FILE = PROCESSED_DIR / "neighborhood_month_agg.parquet"
 FEATURE_FILE = PROCESSED_DIR / "neighborhood_month.parquet"
+BAYES_PRED_FILE = PROCESSED_DIR / "bayes_predictions.parquet"
 
 METRIC_LABELS = {
     "complaints": "Complaints",
@@ -58,9 +58,18 @@ def load_dashboard_data() -> pd.DataFrame:
                 if col in df.columns:
                     df[col] = df[col].astype(str)
             return df
-    raise FileNotFoundError(
-        "No processed dataset found. Run src/extract_311.py, src/build_features.py, and optional merge/build scripts first."
-    )
+    raise FileNotFoundError("No processed dataset found.")
+
+
+@st.cache_data(show_spinner="Loading Bayesian predictions...")
+def load_bayes_predictions() -> pd.DataFrame:
+    if not BAYES_PRED_FILE.exists():
+        raise FileNotFoundError("Bayesian predictions not found. Run src/predict_bayesian_model.py first.")
+    df = pd.read_parquet(BAYES_PRED_FILE)
+    for col in ["month", "borough", "community_board"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+    return df
 
 
 @st.cache_data(show_spinner="Preparing dashboard frames...")
@@ -73,9 +82,7 @@ def prepare_dashboard_frames(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     if "repeat_descriptor_complaints" not in grouped.columns:
         grouped["repeat_descriptor_complaints"] = 0
     if "pct_repeat_descriptor" not in grouped.columns:
-        grouped["pct_repeat_descriptor"] = (
-            grouped["repeat_descriptor_complaints"] / grouped["complaints"].clip(lower=1)
-        )
+        grouped["pct_repeat_descriptor"] = grouped["repeat_descriptor_complaints"] / grouped["complaints"].clip(lower=1)
 
     agg_dict: dict[str, tuple[str, str]] = {
         "complaints": ("complaints", "sum"),
@@ -84,26 +91,18 @@ def prepare_dashboard_frames(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "avg_response_hours": ("avg_response_hours", "mean"),
         "pct_repeat_descriptor": ("pct_repeat_descriptor", "mean"),
     }
-
     if "complaints_per_1000" in grouped.columns:
         agg_dict["complaints_per_1000"] = ("complaints_per_1000", "mean")
     if "repeat_descriptor_per_1000" in grouped.columns:
         agg_dict["repeat_descriptor_per_1000"] = ("repeat_descriptor_per_1000", "mean")
 
     finest = grouped.groupby(["month", "borough", "community_board", "complaint_type"], as_index=False).agg(**agg_dict)
-
     by_district = finest.groupby(["month", "borough", "community_board"], as_index=False).agg(**agg_dict)
 
-    # carry demographic columns through if present
     demo_cols = [c for c in DEMOGRAPHIC_LABELS if c in grouped.columns]
     if demo_cols:
-        demo_by_district = grouped.groupby(["month", "borough", "community_board"], as_index=False)[demo_cols].mean()
-        by_district = by_district.merge(
-            demo_by_district,
-            on=["month", "borough", "community_board"],
-            how="left",
-        )
-
+        demo_df = grouped.groupby(["month", "borough", "community_board"], as_index=False)[demo_cols].mean()
+        by_district = by_district.merge(demo_df, on=["month", "borough", "community_board"], how="left")
     if "population" in grouped.columns:
         pop_df = grouped.groupby(["month", "borough", "community_board"], as_index=False)["population"].mean()
         by_district = by_district.merge(pop_df, on=["month", "borough", "community_board"], how="left")
@@ -113,13 +112,11 @@ def prepare_dashboard_frames(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     by_district["boro_cd"] = by_district["boro_cd"].astype(int)
     by_district["repeat_share_pct"] = by_district["pct_repeat_descriptor"].fillna(0) * 100
 
-    overview = by_district.sort_values("month")
-
     type_trend = finest.groupby(["month", "complaint_type"], as_index=False).agg(
         complaints=("complaints", "sum"),
         repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
     )
-    return {"finest": finest, "overview": overview, "type_trend": type_trend}
+    return {"finest": finest, "overview": by_district.sort_values("month"), "type_trend": type_trend}
 
 
 def filter_data(df: pd.DataFrame, sel_types: list[str], sel_boroughs: list[str], start: str, end: str) -> pd.DataFrame:
@@ -131,15 +128,8 @@ def filter_data(df: pd.DataFrame, sel_types: list[str], sel_boroughs: list[str],
     return out[(out["month"] >= start) & (out["month"] <= end)]
 
 
-@st.cache_data(show_spinner="Rendering map...")
-def build_single_month_map(
-    _geojson: dict,
-    _map_df: pd.DataFrame,
-    metric: str,
-    month: str,
-    global_min: float,
-    global_max: float,
-) -> str:
+@st.cache_data(show_spinner="Rendering burden map...")
+def build_single_month_map(_geojson: dict, _map_df: pd.DataFrame, metric: str, month: str, global_min: float, global_max: float) -> str:
     month_data = _map_df[_map_df["month"] == month].copy()
     if month_data.empty:
         m = folium.Map(location=[40.7128, -74.0060], zoom_start=10, tiles="CartoDB dark_matter")
@@ -202,12 +192,14 @@ def available_demo_cols(df: pd.DataFrame) -> list[str]:
 
 
 def build_demo_overview(filtered_overview: pd.DataFrame, demo_col: str) -> pd.DataFrame:
+    if demo_col not in filtered_overview.columns:
+        return pd.DataFrame()
     cols = ["month", "borough", "community_board", "boro_cd", "complaints", "complaints_per_1000", demo_col]
-    extra_cols = [c for c in ["population"] if c in filtered_overview.columns]
-    keep = [c for c in cols + extra_cols if c in filtered_overview.columns]
-    demo_df = filtered_overview[keep].copy()
-    demo_df = demo_df.dropna(subset=[demo_col])
-    return demo_df
+    if "population" in filtered_overview.columns:
+        cols.append("population")
+    cols = [c for c in cols if c in filtered_overview.columns]
+    demo_df = filtered_overview[cols].copy()
+    return demo_df.dropna(subset=[demo_col])
 
 
 def build_demo_map_figure(demo_df: pd.DataFrame, geojson: dict, focused_month: str, demo_col: str):
@@ -222,12 +214,7 @@ def build_demo_map_figure(demo_df: pd.DataFrame, geojson: dict, focused_month: s
         color=demo_col,
         color_continuous_scale="Viridis",
         hover_name="community_board",
-        hover_data={
-            demo_col: ":.3f" if demo_col != "median_income" else True,
-            "complaints": True,
-            "complaints_per_1000": ":.2f" if "complaints_per_1000" in month_slice.columns else False,
-            "boro_cd": False,
-        },
+        hover_data={demo_col: True, "complaints": True, "complaints_per_1000": ":.2f", "boro_cd": False},
         mapbox_style="carto-darkmatter",
         zoom=9.3,
         center={"lat": 40.7128, "lon": -74.0060},
@@ -251,11 +238,7 @@ def build_demo_scatter(demo_df: pd.DataFrame, demo_col: str):
         size=size_col,
         hover_name="community_board",
         title=f"Complaints per 1,000 vs {DEMOGRAPHIC_LABELS.get(demo_col, demo_col)}",
-        labels={
-            demo_col: DEMOGRAPHIC_LABELS.get(demo_col, demo_col),
-            "complaints_per_1000": "Complaints per 1,000 residents",
-            "borough": "Borough",
-        },
+        labels={demo_col: DEMOGRAPHIC_LABELS.get(demo_col, demo_col), "complaints_per_1000": "Complaints per 1,000 residents"},
     )
     fig.update_layout(height=540, margin=dict(l=0, r=0, t=48, b=0))
     return fig
@@ -267,12 +250,10 @@ def make_overlap_table(filtered_overview: pd.DataFrame, vulnerability_col: str, 
     extra = [c for c in ["median_income", "poverty_rate", "pct_black", "pct_hispanic", "pct_white", "pct_asian"] if c in month_df.columns]
     use_cols = list(dict.fromkeys(cols + extra))
     month_df = month_df[use_cols].dropna(subset=["complaints_per_1000", vulnerability_col]).copy()
-
     if month_df.empty:
         return month_df
 
     burden_cut = month_df["complaints_per_1000"].quantile(0.75)
-
     if vulnerability_col == "median_income":
         vuln_cut = month_df["median_income"].quantile(0.25)
         month_df["overlap_flag"] = np.where(
@@ -287,20 +268,24 @@ def make_overlap_table(filtered_overview: pd.DataFrame, vulnerability_col: str, 
             "High burden + high vulnerability",
             "Other",
         )
-
     return month_df.sort_values(["overlap_flag", "complaints_per_1000"], ascending=[False, False])
 
 
 def main() -> None:
     st.set_page_config(page_title="NYC Sanitation Burden Explorer", layout="wide")
     st.title("NYC Sanitation Burden Explorer")
-    st.caption("Explorer for sanitation-related 311 burden across NYC community districts, with demographic context.")
+    st.caption("Explorer for sanitation-related 311 burden across NYC community districts, with demographic context and Bayesian prediction.")
 
     try:
         df = load_dashboard_data()
     except FileNotFoundError as e:
         st.error(str(e))
         st.stop()
+
+    try:
+        bayes_df = load_bayes_predictions()
+    except FileNotFoundError:
+        bayes_df = None
 
     frames = prepare_dashboard_frames(df)
     finest = frames["finest"]
@@ -335,7 +320,7 @@ def main() -> None:
     filtered_range = filtered_frames["finest"]
     filtered_overview = filtered_frames["overview"]
     filtered_type = filtered_frames["type_trend"]
-    
+
     global_min = float(filtered_overview[metric].min()) if not filtered_overview.empty else 0
     global_max = float(filtered_overview[metric].max()) if not filtered_overview.empty else 1
 
@@ -350,7 +335,6 @@ def main() -> None:
     @st.fragment
     def render_focused_fragment() -> None:
         map_col, rank_col = st.columns([1.8, 1.0])
-
         with map_col:
             st.subheader(f"Burden Map — {sel_focused}")
             try:
@@ -369,10 +353,7 @@ def main() -> None:
             ranking["label"] = ranking["community_board"] + " (" + ranking["borough"] + ")"
             fig_rank = px.bar(
                 ranking.sort_values(metric, ascending=True),
-                x=metric,
-                y="label",
-                orientation="h",
-                color="borough",
+                x=metric, y="label", orientation="h", color="borough",
                 labels={"label": "Community district", metric: format_metric_label(metric)},
                 title=f"Top districts — {sel_focused}",
             )
@@ -389,26 +370,16 @@ def main() -> None:
             open_cases=("open_cases", "sum"),
             repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
         )
-        fig_city = px.line(
-            city,
-            x="month",
-            y=["complaints", "repeat_descriptor_complaints", "open_cases"],
-            markers=True,
-            title=f"Monthly burden ({sel_months[0]} to {sel_months[1]})",
-            labels={"value": "Count", "variable": "Metric"},
-        )
+        fig_city = px.line(city, x="month", y=["complaints", "repeat_descriptor_complaints", "open_cases"], markers=True,
+                           title=f"Monthly burden ({sel_months[0]} to {sel_months[1]})",
+                           labels={"value": "Count", "variable": "Metric"})
         fig_city.update_layout(height=360, margin=dict(l=0, r=0, t=48, b=0))
         st.plotly_chart(fig_city, use_container_width=True)
 
     with t2:
         st.subheader("Complaint Mix Over Time")
-        fig_mix = px.area(
-            filtered_type,
-            x="month",
-            y="complaints",
-            color="complaint_type",
-            title=f"Complaint types ({sel_months[0]} to {sel_months[1]})",
-        )
+        fig_mix = px.area(filtered_type, x="month", y="complaints", color="complaint_type",
+                          title=f"Complaint types ({sel_months[0]} to {sel_months[1]})")
         fig_mix.update_layout(height=360, margin=dict(l=0, r=0, t=48, b=0))
         st.plotly_chart(fig_mix, use_container_width=True)
 
@@ -419,37 +390,28 @@ def main() -> None:
     dist_series = (
         filtered_range[filtered_range["community_board"] == sel_dist]
         .groupby(["month", "complaint_type"], as_index=False)
-        .agg(
-            complaints=("complaints", "sum"),
-            open_cases=("open_cases", "sum"),
-            repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
-            avg_response_hours=("avg_response_hours", "mean"),
-        )
+        .agg(complaints=("complaints", "sum"),
+             open_cases=("open_cases", "sum"),
+             repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
+             avg_response_hours=("avg_response_hours", "mean"))
         .sort_values(["month", "complaint_type"])
     )
     dist_total = (
         filtered_overview[filtered_overview["community_board"] == sel_dist]
         .groupby("month", as_index=False)
-        .agg(
-            complaints=("complaints", "sum"),
-            open_cases=("open_cases", "sum"),
-            repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
-            avg_response_hours=("avg_response_hours", "mean"),
-            pct_repeat_descriptor=("pct_repeat_descriptor", "mean"),
-        )
+        .agg(complaints=("complaints", "sum"),
+             open_cases=("open_cases", "sum"),
+             repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
+             avg_response_hours=("avg_response_hours", "mean"),
+             pct_repeat_descriptor=("pct_repeat_descriptor", "mean"))
         .sort_values("month")
     )
 
     d1, d2 = st.columns([1.4, 1.0])
     with d1:
-        fig_dist = px.line(
-            dist_total,
-            x="month",
-            y=["complaints", "repeat_descriptor_complaints", "open_cases"],
-            markers=True,
-            title=f"{sel_dist}: trend ({sel_months[0]} to {sel_months[1]})",
-            labels={"value": "Count", "variable": "Metric"},
-        )
+        fig_dist = px.line(dist_total, x="month", y=["complaints", "repeat_descriptor_complaints", "open_cases"], markers=True,
+                           title=f"{sel_dist}: trend ({sel_months[0]} to {sel_months[1]})",
+                           labels={"value": "Count", "variable": "Metric"})
         fig_dist.update_layout(height=380, margin=dict(l=0, r=0, t=48, b=0))
         st.plotly_chart(fig_dist, use_container_width=True)
 
@@ -467,21 +429,14 @@ def main() -> None:
 
     breakdown = (
         dist_series.groupby("complaint_type", as_index=False)
-        .agg(
-            complaints=("complaints", "sum"),
-            repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
-            avg_response_hours=("avg_response_hours", "mean"),
-        )
+        .agg(complaints=("complaints", "sum"),
+             repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
+             avg_response_hours=("avg_response_hours", "mean"))
         .sort_values("complaints", ascending=False)
     )
-    fig_breakdown = px.bar(
-        breakdown,
-        x="complaint_type",
-        y="complaints",
-        color="repeat_descriptor_complaints",
-        title=f"{sel_dist}: complaint breakdown ({sel_months[0]} to {sel_months[1]})",
-        labels={"complaint_type": "Type", "complaints": "Complaints", "repeat_descriptor_complaints": "Repeat"},
-    )
+    fig_breakdown = px.bar(breakdown, x="complaint_type", y="complaints", color="repeat_descriptor_complaints",
+                           title=f"{sel_dist}: complaint breakdown ({sel_months[0]} to {sel_months[1]})",
+                           labels={"complaint_type": "Type", "complaints": "Complaints", "repeat_descriptor_complaints": "Repeat"})
     fig_breakdown.update_layout(height=360, margin=dict(l=0, r=0, t=48, b=0))
     st.plotly_chart(fig_breakdown, use_container_width=True)
 
@@ -491,112 +446,157 @@ def main() -> None:
     st.header("Equity Context")
     if not has_demo or not demo_cols:
         st.info("Merged demographic columns were not found. Run src/merge_demo.py and reload the app.")
-        return
+    else:
+        selected_demo = st.selectbox("Demographic variable", demo_cols,
+                                     index=demo_cols.index("median_income") if "median_income" in demo_cols else 0,
+                                     format_func=lambda x: DEMOGRAPHIC_LABELS.get(x, x))
+        eq1, eq2, eq3 = st.tabs(["Map + Scatter", "Poverty / Race", "Overlap"])
 
-    selected_demo = st.selectbox(
-        "Demographic variable",
-        demo_cols,
-        index=demo_cols.index("median_income") if "median_income" in demo_cols else 0,
-        format_func=lambda x: DEMOGRAPHIC_LABELS.get(x, x),
-    )
+        with eq1:
+            st.subheader("Demographic map and burden comparison")
+            demo_df = build_demo_overview(filtered_overview, selected_demo)
+            c_left, c_right = st.columns(2)
+            with c_left:
+                if demo_df.empty:
+                    st.info(f"No data available for {DEMOGRAPHIC_LABELS.get(selected_demo, selected_demo)}.")
+                else:
+                    try:
+                        geojson = load_community_district_geojson()
+                        map_fig = build_demo_map_figure(demo_df, geojson, sel_focused, selected_demo)
+                        if map_fig is not None:
+                            st.plotly_chart(map_fig, use_container_width=True)
+                    except FileNotFoundError as e:
+                        st.info(str(e))
+            with c_right:
+                scatter_fig = build_demo_scatter(demo_df, selected_demo)
+                if scatter_fig is not None:
+                    st.plotly_chart(scatter_fig, use_container_width=True)
+            st.caption("This view is descriptive. It shows spatial overlap and correlation, not causation.")
 
-    eq1, eq2, eq3 = st.tabs(["Map + Scatter", "Poverty / Race", "Overlap"])
+        with eq2:
+            st.subheader("Poverty and race-share context")
+            demo_choices_v2 = [c for c in demo_cols if c != "median_income"]
+            if not demo_choices_v2:
+                st.info("No poverty or race-share variables found.")
+            else:
+                selected_demo_v2 = st.selectbox("Choose a poverty or race-share variable", demo_choices_v2,
+                                                format_func=lambda x: DEMOGRAPHIC_LABELS.get(x, x), key="v2_demo")
+                demo_df_v2 = build_demo_overview(filtered_overview, selected_demo_v2)
+                c_left2, c_right2 = st.columns(2)
+                with c_left2:
+                    try:
+                        geojson = load_community_district_geojson()
+                        map_fig2 = build_demo_map_figure(demo_df_v2, geojson, sel_focused, selected_demo_v2)
+                        if map_fig2 is not None:
+                            st.plotly_chart(map_fig2, use_container_width=True)
+                    except FileNotFoundError as e:
+                        st.info(str(e))
+                with c_right2:
+                    scatter_fig2 = build_demo_scatter(demo_df_v2, selected_demo_v2)
+                    if scatter_fig2 is not None:
+                        st.plotly_chart(scatter_fig2, use_container_width=True)
+                st.caption("These patterns may help identify where sanitation burden and demographic context warrant closer review.")
 
-    with eq1:
-        st.subheader("Demographic map and burden comparison")
-        demo_df = build_demo_overview(filtered_overview, selected_demo)
+        with eq3:
+            st.subheader("High burden + high vulnerability")
+            overlap_candidates = []
+            if "median_income" in demo_cols:
+                overlap_candidates.append("median_income")
+            if "poverty_rate" in demo_cols:
+                overlap_candidates.append("poverty_rate")
+            for c in ["pct_black", "pct_hispanic", "pct_white", "pct_asian"]:
+                if c in demo_cols:
+                    overlap_candidates.append(c)
 
-        c_left, c_right = st.columns(2)
-        with c_left:
-            try:
-                geojson = load_community_district_geojson()
-                map_fig = build_demo_map_figure(demo_df, geojson, sel_focused, selected_demo)
-                if map_fig is not None:
-                    st.plotly_chart(map_fig, use_container_width=True)
-            except FileNotFoundError as e:
-                st.info(str(e))
+            if not overlap_candidates:
+                st.info("No suitable vulnerability fields found.")
+            else:
+                overlap_var = st.selectbox("Choose vulnerability context variable", overlap_candidates,
+                                           format_func=lambda x: DEMOGRAPHIC_LABELS.get(x, x))
+                overlap_df = make_overlap_table(filtered_overview, overlap_var, sel_focused)
+                flagged = overlap_df[overlap_df["overlap_flag"] != "Other"].copy()
+                o1, o2 = st.columns([1.4, 1.0])
+                with o1:
+                    st.markdown("### Highlighted districts")
+                    st.dataframe(flagged, use_container_width=True)
+                with o2:
+                    if not flagged.empty:
+                        fig_overlap = px.bar(flagged, x="community_board", y="complaints_per_1000", color="overlap_flag",
+                                             title=f"Flagged districts — {sel_focused}")
+                        fig_overlap.update_layout(height=500, margin=dict(l=0, r=0, t=48, b=0))
+                        st.plotly_chart(fig_overlap, use_container_width=True)
+                st.caption("Flagged districts are defined using simple percentile thresholds. This is a screening tool, not a causal or definitive equity finding.")
 
-        with c_right:
-            scatter_fig = build_demo_scatter(demo_df, selected_demo)
-            if scatter_fig is not None:
-                st.plotly_chart(scatter_fig, use_container_width=True)
+    st.header("Bayesian Prediction")
+    if bayes_df is None:
+        st.info("Run src/predict_bayesian_model.py to enable Bayesian predictions.")
+    else:
+        bayes_filtered = bayes_df.copy()
+        if sel_boroughs:
+            bayes_filtered = bayes_filtered[bayes_filtered["borough"].isin(sel_boroughs)]
+        bayes_filtered = bayes_filtered[(bayes_filtered["month"] >= sel_months[0]) & (bayes_filtered["month"] <= sel_months[1])]
 
-        st.caption("This view is descriptive. It shows spatial overlap and correlation, not causation.")
-
-    with eq2:
-        st.subheader("Poverty and race-share context")
-        demo_choices_v2 = [c for c in demo_cols if c != "median_income"]
-        if not demo_choices_v2:
-            st.info("No poverty or race-share variables found.")
+        if bayes_filtered.empty:
+            st.info("No Bayesian predictions available for the selected filters.")
         else:
-            selected_demo_v2 = st.selectbox(
-                "Choose a poverty or race-share variable",
-                demo_choices_v2,
-                format_func=lambda x: DEMOGRAPHIC_LABELS.get(x, x),
-                key="v2_demo",
-            )
-            demo_df_v2 = build_demo_overview(filtered_overview, selected_demo_v2)
+            bayes_tabs = st.tabs(["Top Predicted Districts", "Prediction vs Uncertainty", "Actual vs Predicted"])
 
-            c_left2, c_right2 = st.columns(2)
-            with c_left2:
-                try:
-                    geojson = load_community_district_geojson()
-                    map_fig2 = build_demo_map_figure(demo_df_v2, geojson, sel_focused, selected_demo_v2)
-                    if map_fig2 is not None:
-                        st.plotly_chart(map_fig2, use_container_width=True)
-                except FileNotFoundError as e:
-                    st.info(str(e))
+            with bayes_tabs[0]:
+                latest_pred = bayes_filtered[bayes_filtered["month"] == sel_focused].copy()
+                if latest_pred.empty:
+                    latest_pred = bayes_filtered[bayes_filtered["month"] == bayes_filtered["month"].max()].copy()
+                latest_pred = latest_pred.sort_values("predicted_complaints", ascending=False).head(15)
+                fig_top_pred = px.bar(
+                    latest_pred.sort_values("predicted_complaints", ascending=True),
+                    x="predicted_complaints", y="community_board", orientation="h", color="borough",
+                    title=f"Top predicted districts — {sel_focused}",
+                    labels={"predicted_complaints": "Predicted complaints (posterior median)", "community_board": "Community district"},
+                )
+                fig_top_pred.update_layout(height=550, margin=dict(l=0, r=0, t=48, b=0))
+                st.plotly_chart(fig_top_pred, use_container_width=True)
+                st.dataframe(
+                    latest_pred[["month", "borough", "community_board", "complaints", "predicted_complaints",
+                                 "predicted_complaints_p10", "predicted_complaints_p90", "prediction_interval_width"]],
+                    use_container_width=True,
+                )
 
-            with c_right2:
-                scatter_fig2 = build_demo_scatter(demo_df_v2, selected_demo_v2)
-                if scatter_fig2 is not None:
-                    st.plotly_chart(scatter_fig2, use_container_width=True)
+            with bayes_tabs[1]:
+                latest_pred = bayes_filtered[bayes_filtered["month"] == sel_focused].copy()
+                if latest_pred.empty:
+                    latest_pred = bayes_filtered[bayes_filtered["month"] == bayes_filtered["month"].max()].copy()
+                fig_unc = px.scatter(
+                    latest_pred,
+                    x="predicted_complaints", y="prediction_interval_width", color="borough",
+                    hover_name="community_board", size="complaints",
+                    title=f"Predicted burden vs uncertainty — {sel_focused}",
+                    labels={"predicted_complaints": "Predicted complaints (posterior median)",
+                            "prediction_interval_width": "Prediction interval width (p90 - p10)",
+                            "complaints": "Observed complaints"},
+                )
+                fig_unc.update_layout(height=550, margin=dict(l=0, r=0, t=48, b=0))
+                st.plotly_chart(fig_unc, use_container_width=True)
 
-            st.caption("These patterns may help identify where sanitation burden and demographic context warrant closer review.")
+            with bayes_tabs[2]:
+                pred_dist_opts = sorted(bayes_filtered["community_board"].dropna().unique())
+                pred_sel_dist = st.selectbox("Community district for Bayesian comparison", pred_dist_opts, key="bayes_dist_select")
+                dist_pred = bayes_filtered[bayes_filtered["community_board"] == pred_sel_dist].copy().sort_values("month")
+                fig_actual_pred = px.line(dist_pred, x="month", y=["complaints", "predicted_complaints"], markers=True,
+                                          title=f"{pred_sel_dist}: actual vs predicted complaints",
+                                          labels={"value": "Complaints", "variable": "Series"})
+                fig_actual_pred.update_layout(height=450, margin=dict(l=0, r=0, t=48, b=0))
+                st.plotly_chart(fig_actual_pred, use_container_width=True)
+                fig_band = px.line(dist_pred, x="month", y=["predicted_complaints_p10", "predicted_complaints_p90"],
+                                   markers=False, title=f"{pred_sel_dist}: prediction interval",
+                                   labels={"value": "Predicted complaints", "variable": "Interval bound"})
+                fig_band.update_layout(height=350, margin=dict(l=0, r=0, t=48, b=0))
+                st.plotly_chart(fig_band, use_container_width=True)
+                st.dataframe(
+                    dist_pred[["month", "complaints", "predicted_complaints", "predicted_complaints_p10",
+                               "predicted_complaints_p90", "prediction_interval_width"]],
+                    use_container_width=True,
+                )
 
-    with eq3:
-        st.subheader("High burden + high vulnerability")
-        overlap_candidates = []
-        if "median_income" in demo_cols:
-            overlap_candidates.append("median_income")
-        if "poverty_rate" in demo_cols:
-            overlap_candidates.append("poverty_rate")
-        for c in ["pct_black", "pct_hispanic", "pct_white", "pct_asian"]:
-            if c in demo_cols:
-                overlap_candidates.append(c)
-
-        if not overlap_candidates:
-            st.info("No suitable vulnerability fields found.")
-        else:
-            overlap_var = st.selectbox(
-                "Choose vulnerability context variable",
-                overlap_candidates,
-                format_func=lambda x: DEMOGRAPHIC_LABELS.get(x, x),
-            )
-            overlap_df = make_overlap_table(filtered_overview, overlap_var, sel_focused)
-            flagged = overlap_df[overlap_df["overlap_flag"] != "Other"].copy()
-
-            o1, o2 = st.columns([1.4, 1.0])
-            with o1:
-                st.markdown("### Highlighted districts")
-                st.dataframe(flagged, use_container_width=True)
-
-            with o2:
-                if not flagged.empty:
-                    fig_overlap = px.bar(
-                        flagged,
-                        x="community_board",
-                        y="complaints_per_1000",
-                        color="overlap_flag",
-                        title=f"Flagged districts — {sel_focused}",
-                    )
-                    fig_overlap.update_layout(height=500, margin=dict(l=0, r=0, t=48, b=0))
-                    st.plotly_chart(fig_overlap, use_container_width=True)
-
-            st.caption(
-                "Flagged districts are defined using simple percentile thresholds. "
-                "This is a screening tool, not a causal or definitive equity finding."
-            )
+        st.caption("Bayesian predictions are exploratory and uncertainty-aware. They are based on the fitted hierarchical count model and should be interpreted as screening estimates, not exact forecasts.")
 
 
 if __name__ == "__main__":

@@ -29,12 +29,27 @@ How to run:
 # From root folder 
 python -m venv .venv
 source .venv/bin/activate   # Mac/Linux
-pip install -r requirements.txt
 
+pip install -r requirements.txt
+#optional for quick sanity check and make sure requirements have been installed properly
+python -c "import numpy, pandas, pyarrow, matplotlib, arviz, pymc, bambi, streamlit, plotly, folium; print('ok')"
 
 python src/extract_311.py
 python src/build_features.py
-streamlit run app/streamlit_app.py
+python src/merge_demo.py          
+python src/build_dashboard_data.py
+
+
+create a modeling dataset
+python src/build_bayesian_dataset.py
+
+fit the Bayesian model with Bambi
+python src/fit_bayesian_model.py
+
+generate predictions for the latest month + next month
+python src/predict_bayesian_model.py
+
+python -m streamlit run app/explorer.py
 
 
 # NOTES
@@ -64,8 +79,58 @@ median household income
 
 # 4/25/26
 pip install -r requirements.txt
+#optional for quick sanity check and make sure requirements have been installed properly
+python -c "import numpy, pandas, pyarrow, matplotlib, arviz, pymc, bambi, streamlit, plotly, folium; print('ok')"
+
 python src/extract_311.py
 python src/build_features.py
-python src/merge_demo.py          # optional but recommended
+python src/merge_demo.py          
 python src/build_dashboard_data.py
-streamlit run app/explorer.py
+
+python -m streamlit run app/explorer.py
+
+# To get demographics csv from census
+python src/generate_demographics_from_acs.py --out data/processed/demographics_placeholder.csv
+
+# Bayes Modeling
+Because sanitation complaint data are noisy, uneven across districts, and subject to overdispersion, a Bayesian hierarchical count model may be more appropriate than a simple linear model. This approach allows estimates for individual districts to be partially pooled toward broader borough- and city-level patterns, reducing instability in low-data areas while still preserving local variation. It also provides credible intervals that reflect uncertainty in predicted complaint burden.
+
+Why Bayesian modeling?
+1. Small or noisy samples
+If some complaint categories are sparse, a Bayesian model can avoid overreacting to one weird month.
+
+2. Partial pooling across districts
+This is a big one. Instead of treating every community district as fully independent, we can let districts “borrow strength” from the overall city pattern and from their borough. (some districts have a lot of data, and some have less)
+
+Install the Bayesian packages (see requirements)
+
+create a modeling dataset
+python src/build_bayesian_dataset.py
+
+fit the Bayesian model with Bambi
+python src/fit_bayesian_model.py
+
+generate predictions for the latest month + next month
+python src/predict_bayesian_model.py
+
+
+
+We implemented a Bayesian hierarchical negative binomial model to estimate monthly sanitation complaint burden by community district, accounting for population exposure, temporal persistence, seasonality, and district-level heterogeneity. The model fit improved substantially after tuning, and preliminary results suggest prior complaint burden and seasonality are strong predictors.
+
+The Bayesian model converged reasonably well after tuning, though a small number of divergences remained. Results are therefore used as an exploratory predictive layer rather than a definitive inferential model.
+
+Currently:
+current dashboard as the descriptive layer:
+
+burden map
+trends
+demographic comparisons
+overlap flags
+
+Then the Bayesian prediction layer:
+
+predicted complaints next month
+posterior interval
+districts with highest predicted burden
+districts with highest uncertainty
+

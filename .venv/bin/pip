@@ -1,4 +1,4 @@
-#!/Users/uyen-phuongnguyen/schoolgithub/solid-waste-civic-tech/solid-waste-civic-tech/.venv/bin/python
+#!/Users/uyen-phuongnguyen/schoolgithub/solid-waste-civic-tech/solid-waste-civic-tech/.venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys
