@@ -34,6 +34,12 @@ BOROUGH_CODES = {
 }
 
 
+
+
+def month_sort_key(v: object) -> pd.Timestamp:
+    return pd.to_datetime(v, format="%Y-%m", errors="coerce")
+
+
 def load_main_dataset(prefer_merged: bool = True) -> pd.DataFrame:
     """Load the best available processed dataset."""
     path = MERGED_FILE if prefer_merged and MERGED_FILE.exists() else FEATURE_FILE
@@ -45,8 +51,9 @@ def load_main_dataset(prefer_merged: bool = True) -> pd.DataFrame:
 
 
 
-def parse_BoroCD(value: Any) -> int | None:
-    """Parse community board strings such as '01 MANHATTAN' into numeric BoroCD values.
+def parse_boro_cd(value: Any) -> int | None:
+    """Parse community board strings such as '01 MANHATTAN' into numeric boro_cd values.
+
     NYC community district geojson files often use an integer key like 101, 202, 303, etc.
     This helper converts common text formats into that code.
     """
@@ -77,9 +84,9 @@ def parse_BoroCD(value: Any) -> int | None:
 
 
 
-def add_BoroCD(df: pd.DataFrame, column: str = "community_board") -> pd.DataFrame:
+def add_boro_cd(df: pd.DataFrame, column: str = "community_board") -> pd.DataFrame:
     out = df.copy()
-    out["BoroCD"] = out[column].apply(parse_BoroCD)
+    out["boro_cd"] = out[column].apply(parse_boro_cd)
     return out
 
 
@@ -110,9 +117,9 @@ def summarize_for_choropleth(df: pd.DataFrame) -> pd.DataFrame:
         )
         .rename(columns={"metric": metric_col})
     )
-    grouped = add_BoroCD(grouped)
-    grouped = grouped[grouped["BoroCD"].notna()].copy()
-    grouped["BoroCD"] = grouped["BoroCD"].astype(int)
+    grouped = add_boro_cd(grouped)
+    grouped = grouped[grouped["boro_cd"].notna()].copy()
+    grouped["boro_cd"] = grouped["boro_cd"].astype(int)
     return grouped
 
 

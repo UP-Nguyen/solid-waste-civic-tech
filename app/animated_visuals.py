@@ -68,13 +68,13 @@ try:
         "borough": True,
         "complaints": True,
         metric_col: ':.2f' if metric_col == 'complaints_per_1000' else True,
-        "BoroCD": False,
+        "boro_cd": False,
     }
     fig_choro = px.choropleth_mapbox(
         choro_df,
         geojson=geojson,
-        locations="BoroCD",
-        featureidkey="properties.BoroCD",
+        locations="boro_cd",
+        featureidkey="properties.boro_cd",
         color=metric_col,
         animation_frame="month",
         hover_name="community_board",
@@ -91,7 +91,7 @@ try:
 except FileNotFoundError:
     st.info(
         "To render the choropleth, add a community district geojson file at "
-        f"`{COMMUNITY_DISTRICT_GEOJSON}` with a `properties.BoroCD` field."
+        f"`{COMMUNITY_DISTRICT_GEOJSON}` with a `properties.boro_cd` field."
     )
 except Exception as e:
     st.error(f"Could not build choropleth: {e}")
