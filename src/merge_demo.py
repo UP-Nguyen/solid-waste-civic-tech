@@ -1,14 +1,4 @@
-"""Merge demographic data onto the monthly feature table.
-
-Expected demographic columns:
-- community_board (required)
-- population (required for per-capita metrics)
-- median_income (required for animated scatterplot)
-Optional columns:
-- poverty_rate
-- limited_english_pct
-- broadband_pct
-"""
+"""Merge demographic data onto the monthly feature table."""
 
 from __future__ import annotations
 
@@ -25,8 +15,10 @@ OPTIONAL_COLS = {
     "pct_hispanic",
     "pct_white",
     "pct_asian",
+    "source_puma",
+    "source_name",
+    "approximation_note",
 }
-
 
 
 def main() -> None:
@@ -40,6 +32,7 @@ def main() -> None:
         return
 
     demo = pd.read_csv(demo_path)
+
     missing = REQUIRED_COLS - set(demo.columns)
     if missing:
         raise ValueError(
@@ -51,21 +44,37 @@ def main() -> None:
     demo = demo[keep_cols].copy()
 
     merged = features.merge(demo, on="community_board", how="left")
-    merged["population"] = pd.to_numeric(merged["population"], errors="coerce")
-    merged["median_income"] = pd.to_numeric(merged["median_income"], errors="coerce")
 
-    for col in OPTIONAL_COLS:
+    numeric_cols = [
+        "population",
+        "median_income",
+        "poverty_rate",
+        "limited_english_pct",
+        "broadband_pct",
+        "pct_black",
+        "pct_hispanic",
+        "pct_white",
+        "pct_asian",
+    ]
+
+    for col in numeric_cols:
         if col in merged.columns:
             merged[col] = pd.to_numeric(merged[col], errors="coerce")
 
-    merged["complaints_per_1000"] = (merged["complaints"] / merged["population"].clip(lower=1)) * 1000
+    merged["complaints_per_1000"] = (
+        merged["complaints"] / merged["population"].clip(lower=1)
+    ) * 1000
+
     merged["repeat_descriptor_per_1000"] = (
         merged["repeat_descriptor_complaints"] / merged["population"].clip(lower=1)
     ) * 1000
 
     out_path = PROCESSED_DIR / "neighborhood_month_with_demo.parquet"
     merged.to_parquet(out_path, index=False)
+
     print(f"Saved merged dataset to {out_path}")
+    print("Columns:")
+    print(merged.columns.tolist())
     print(merged.head())
 
 
