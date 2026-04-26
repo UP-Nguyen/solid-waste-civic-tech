@@ -17,7 +17,16 @@ import pandas as pd
 from config import FEATURE_FILE, PROCESSED_DIR
 
 REQUIRED_COLS = {"community_board", "population", "median_income"}
-OPTIONAL_COLS = {"poverty_rate", "limited_english_pct", "broadband_pct"}
+OPTIONAL_COLS = {
+    "poverty_rate",
+    "limited_english_pct",
+    "broadband_pct",
+    "pct_black",
+    "pct_hispanic",
+    "pct_white",
+    "pct_asian",
+}
+
 
 
 def main() -> None:
@@ -44,6 +53,10 @@ def main() -> None:
     merged = features.merge(demo, on="community_board", how="left")
     merged["population"] = pd.to_numeric(merged["population"], errors="coerce")
     merged["median_income"] = pd.to_numeric(merged["median_income"], errors="coerce")
+
+    for col in OPTIONAL_COLS:
+        if col in merged.columns:
+            merged[col] = pd.to_numeric(merged[col], errors="coerce")
 
     merged["complaints_per_1000"] = (merged["complaints"] / merged["population"].clip(lower=1)) * 1000
     merged["repeat_descriptor_per_1000"] = (

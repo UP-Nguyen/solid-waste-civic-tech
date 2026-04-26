@@ -1,13 +1,48 @@
-community_board,population,median_income,poverty_rate,limited_english_pct,broadband_pct
-01 MANHATTAN,0,0,,,
-02 MANHATTAN,0,0,,,
-03 MANHATTAN,0,0,,,
-04 MANHATTAN,0,0,,,
-05 MANHATTAN,0,0,,,
-01 BRONX,0,0,,,
-02 BRONX,0,0,,,
-01 BROOKLYN,0,0,,,
-02 BROOKLYN,0,0,,,
-01 QUEENS,0,0,,,
-02 QUEENS,0,0,,,
-01 STATEN ISLAND,0,0,,,
+community_board,population,median_income,poverty_rate,pct_black,pct_hispanic,pct_white,pct_asian,source_puma,source_name,approximation_note
+01 BRONX,155574,33961,0.37,0.259,0.687,0.025,0.006,04221,"NYC-Bronx Community Districts 1 & 2--Melrose, Mott Haven, Longwood, & Hunts Point PUMA; New York",Combined ACS PUMA row duplicated across multiple community districts
+01 BROOKLYN,203002,101994,0.217,0.062,0.235,0.59,0.065,04301,NYC-Brooklyn Community District 1--Williamsburg & Greenpoint PUMA; New York,Single-district ACS PUMA
+01 QUEENS,175516,89159,0.125,0.059000000000000004,0.262,0.473,0.157,04401,NYC-Queens Community District 1--Astoria & Queensbridge PUMA; New York,Single-district ACS PUMA
+01 STATEN ISLAND,181349,85197,0.159,0.213,0.305,0.34700000000000003,0.1,04501,NYC-Staten Island Community District 1--North Shore PUMA; New York,Single-district ACS PUMA
+02 BRONX,155574,33961,0.37,0.259,0.687,0.025,0.006,04221,"NYC-Bronx Community Districts 1 & 2--Melrose, Mott Haven, Longwood, & Hunts Point PUMA; New York",Combined ACS PUMA row duplicated across multiple community districts
+02 BROOKLYN,125637,145141,0.122,0.187,0.133,0.488,0.11900000000000001,04302,NYC-Brooklyn Community District 2--Downtown Brooklyn & Fort Greene PUMA; New York,Single-district ACS PUMA
+02 QUEENS,123823,94371,0.094,0.021,0.306,0.29600000000000004,0.337,04402,"NYC-Queens Community District 2--Long Island City, Sunnyside, & Woodside PUMA; New York",Single-district ACS PUMA
+02 STATEN ISLAND,142656,94099,0.105,0.033,0.142,0.603,0.19699999999999998,04502,NYC-Staten Island Community District 2--Mid-Island PUMA; New York,Single-district ACS PUMA
+03 BRONX,175043,33029,0.37799999999999995,0.33899999999999997,0.5870000000000001,0.036000000000000004,0.009000000000000001,04263,"NYC-Bronx Community Districts 3 & 6--Morrisania, Tremont, Belmont, & West Farms PUMA; New York",Combined ACS PUMA row duplicated across multiple community districts
+03 BROOKLYN,180283,77146,0.255,0.434,0.187,0.27699999999999997,0.042,04303,NYC-Brooklyn Community District 3--Bedford-Stuyvesant PUMA; New York,Single-district ACS PUMA
+03 QUEENS,161945,78598,0.14800000000000002,0.055999999999999994,0.619,0.11,0.185,04403,NYC-Queens Community District 3--Jackson Heights & East Elmhurst PUMA; New York,Single-district ACS PUMA
+03 STATEN ISLAND,168729,117785,0.06,0.006999999999999999,0.121,0.77,0.077,04503,NYC-Staten Island Community District 3--South Shore PUMA; New York,Single-district ACS PUMA
+04 BRONX,149631,41950,0.322,0.33,0.589,0.045,0.012,04204,NYC-Bronx Community District 4--Highbridge & Concourse PUMA; New York,Single-district ACS PUMA
+04 BROOKLYN,111975,84578,0.212,0.16699999999999998,0.488,0.242,0.057999999999999996,04304,NYC-Brooklyn Community District 4--Bushwick PUMA; New York,Single-district ACS PUMA
+04 QUEENS,168616,70252,0.14800000000000002,0.048,0.536,0.055,0.342,04404,NYC-Queens Community District 4--Elmhurst & Corona PUMA; New York,Single-district ACS PUMA
+05 BRONX,133897,39542,0.33,0.278,0.667,0.017,0.011000000000000001,04205,NYC-Bronx Community District 5--Morris Heights & Mount Hope PUMA; New York,Single-district ACS PUMA
+05 BROOKLYN,201036,54262,0.233,0.5,0.349,0.032,0.063,04305,NYC-Brooklyn Community District 5--East New York & Cypress Hills PUMA; New York,Single-district ACS PUMA
+05 QUEENS,181189,87438,0.11,0.018000000000000002,0.385,0.473,0.09699999999999999,04405,"NYC-Queens Community District 5--Ridgewood, Maspeth, & Middle Village PUMA; New York",Single-district ACS PUMA
+06 BRONX,175043,33029,0.37799999999999995,0.33899999999999997,0.5870000000000001,0.036000000000000004,0.009000000000000001,04263,"NYC-Bronx Community Districts 3 & 6--Morrisania, Tremont, Belmont, & West Farms PUMA; New York",Combined ACS PUMA row duplicated across multiple community districts
+06 BROOKLYN,121009,166599,0.087,0.091,0.151,0.615,0.075,04306,NYC-Brooklyn Community District 6--Park Slope & Carroll Gardens PUMA; New York,Single-district ACS PUMA
+06 QUEENS,121131,97002,0.102,0.031,0.18,0.433,0.292,04406,NYC-Queens Community District 6--Forest Hills & Rego Park PUMA; New York,Single-district ACS PUMA
+07 BRONX,132733,45545,0.273,0.132,0.735,0.055999999999999994,0.057999999999999996,04207,"NYC-Bronx Community District 7--Fordham, Bedford Park, & Norwood PUMA; New York",Single-district ACS PUMA
+07 BROOKLYN,120253,85345,0.187,0.032,0.397,0.28600000000000003,0.252,04307,NYC-Brooklyn Community District 7--Sunset Park & Windsor Terrace PUMA; New York,Single-district ACS PUMA
+07 QUEENS,246517,71863,0.152,0.017,0.174,0.237,0.542,04407,"NYC-Queens Community District 7--Flushing, Murray Hill, & Whitestone PUMA; New York",Single-district ACS PUMA
+08 BRONX,98696,81095,0.147,0.12300000000000001,0.46399999999999997,0.336,0.038,04208,"NYC-Bronx Community District 8--Riverdale, Kingsbridge, & Marble Hill PUMA; New York",Single-district ACS PUMA
+08 BROOKLYN,109719,89846,0.16899999999999998,0.451,0.131,0.299,0.046,04308,NYC-Brooklyn Community District 8--Crown Heights (North) PUMA; New York,Single-district ACS PUMA
+08 QUEENS,154886,86085,0.11800000000000001,0.14,0.198,0.27699999999999997,0.321,04408,"NYC-Queens Community District 8--Fresh Meadows, Hillcrest, & Briarwood PUMA; New York",Single-district ACS PUMA
+09 BRONX,170654,50193,0.262,0.27699999999999997,0.565,0.023,0.094,04209,NYC-Bronx Community District 9--Soundview & Parkchester PUMA; New York,Single-district ACS PUMA
+09 BROOKLYN,97675,73775,0.177,0.54,0.107,0.27399999999999997,0.021,04309,NYC-Brooklyn Community District 9--Crown Heights (South) PUMA; New York,Single-district ACS PUMA
+09 QUEENS,149365,86623,0.11199999999999999,0.059000000000000004,0.40700000000000003,0.17,0.26,04409,"NYC-Queens Community District 9--Kew Gardens, Richmond Hill, & Woodhaven PUMA; New York",Single-district ACS PUMA
+10 BRONX,128419,70575,0.142,0.231,0.43,0.233,0.07400000000000001,04210,NYC-Bronx Community District 10--Co-op City & Throgs Neck PUMA; New York,Single-district ACS PUMA
+10 BROOKLYN,125053,87077,0.14,0.022000000000000002,0.18,0.526,0.24,04310,NYC-Brooklyn Community District 10--Bay Ridge & Dyker Heights PUMA; New York,Single-district ACS PUMA
+10 QUEENS,135400,96115,0.102,0.125,0.252,0.201,0.255,04410,NYC-Queens Community District 10--South Ozone Park & Howard Beach PUMA; New York,Single-district ACS PUMA
+11 BRONX,113982,64950,0.177,0.225,0.452,0.196,0.092,04211,NYC-Bronx Community District 11--Pelham Parkway & Morris Park PUMA; New York,Single-district ACS PUMA
+11 BROOKLYN,182754,67628,0.182,0.013999999999999999,0.16399999999999998,0.38,0.402,04311,NYC-Brooklyn Community District 11--Bensonhurst & Bath Beach PUMA; New York,Single-district ACS PUMA
+11 QUEENS,121282,106404,0.083,0.022000000000000002,0.136,0.355,0.45299999999999996,04411,"NYC-Queens Community District 11--Auburndale, Bayside, & Douglaston PUMA; New York",Single-district ACS PUMA
+12 BRONX,160621,65954,0.201,0.586,0.28300000000000003,0.057999999999999996,0.018000000000000002,04212,"NYC-Bronx Community District 12--Wakefield, Williamsbridge, & Eastchester PUMA; New York",Single-district ACS PUMA
+12 BROOKLYN,194695,67146,0.245,0.031,0.131,0.613,0.175,04312,NYC-Brooklyn Community District 12--Borough Park & Kensington PUMA; New York,Single-district ACS PUMA
+12 QUEENS,254693,77468,0.125,0.5589999999999999,0.166,0.023,0.15,04412,"NYC-Queens Community District 12--Jamaica, St. Albans, & Hollis PUMA; New York",Single-district ACS PUMA
+13 BROOKLYN,110145,45560,0.243,0.129,0.149,0.546,0.132,04313,NYC-Brooklyn Community District 13--Coney Island & Brighton Beach PUMA; New York,Single-district ACS PUMA
+13 QUEENS,205191,107768,0.083,0.518,0.132,0.091,0.191,04413,"NYC-Queens Community District 13--Queens Village, Bellerose, & Rosedale PUMA; New York",Single-district ACS PUMA
+14 BROOKLYN,159561,79119,0.158,0.301,0.157,0.37200000000000005,0.11599999999999999,04314,NYC-Brooklyn Community District 14--Flatbush & Midwood PUMA; New York,Single-district ACS PUMA
+14 QUEENS,130570,66057,0.19699999999999998,0.34299999999999997,0.22699999999999998,0.34,0.039,04414,NYC-Queens Community District 14--The Rockaways PUMA; New York,Single-district ACS PUMA
+15 BROOKLYN,156462,73891,0.156,0.048,0.096,0.622,0.18600000000000003,04315,NYC-Brooklyn Community District 15--Sheepshead Bay & Gravesend (East) PUMA; New York,Single-district ACS PUMA
+16 BROOKLYN,100787,41322,0.331,0.643,0.233,0.052000000000000005,0.015,04316,NYC-Brooklyn Community District 16--Ocean Hill & Brownsville PUMA; New York,Single-district ACS PUMA
+17 BROOKLYN,153538,69774,0.156,0.773,0.075,0.046,0.018000000000000002,04317,NYC-Brooklyn Community District 17--East Flatbush PUMA; New York,Single-district ACS PUMA
+18 BROOKLYN,192722,88101,0.11699999999999999,0.584,0.087,0.213,0.057,04318,NYC-Brooklyn Community District 18--Canarsie & Flatlands PUMA; New York,Single-district ACS PUMA
