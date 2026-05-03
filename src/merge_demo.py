@@ -1,7 +1,6 @@
-"""Merge demographic data onto the monthly feature table."""
-
 from __future__ import annotations
 
+import re
 import pandas as pd
 
 from config import FEATURE_FILE, PROCESSED_DIR
@@ -19,6 +18,36 @@ OPTIONAL_COLS = {
     "source_name",
     "approximation_note",
 }
+
+
+def normalize_cb(value: object) -> str | None:
+    if pd.isna(value):
+        return None
+
+    s = str(value).upper().strip()
+
+    # collapse repeated whitespace
+    s = re.sub(r"\s+", " ", s)
+
+    # normalize borough wording variants
+    s = s.replace("MN", "MANHATTAN")
+    s = s.replace("BK", "BROOKLYN")
+    s = s.replace("BX", "BRONX")
+    s = s.replace("QN", "QUEENS")
+    s = s.replace("SI", "STATEN ISLAND")
+
+    # remove extra punctuation / parentheses if present
+    s = s.replace("(", " ").replace(")", " ").replace("-", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+
+    # standardize leading board number if present
+    m = re.match(r"^(\d{1,2})\s+(.*)$", s)
+    if m:
+        board_num = f"{int(m.group(1)):02d}"
+        borough = m.group(2).strip()
+        return f"{board_num} {borough}"
+
+    return s
 
 
 def main() -> None:
@@ -42,6 +71,19 @@ def main() -> None:
 
     keep_cols = [c for c in demo.columns if c in REQUIRED_COLS or c in OPTIONAL_COLS]
     demo = demo[keep_cols].copy()
+
+    # normalize join keys on both sides
+    features["community_board"] = features["community_board"].map(normalize_cb)
+    demo["community_board"] = demo["community_board"].map(normalize_cb)
+
+    # debug: show unmatched boards
+    feature_cb = set(features["community_board"].dropna().unique())
+    demo_cb = set(demo["community_board"].dropna().unique())
+
+    missing_in_demo = sorted(feature_cb - demo_cb)
+    if missing_in_demo:
+        print("Community boards in features but not demographics:")
+        print(missing_in_demo)
 
     merged = features.merge(demo, on="community_board", how="left")
 
@@ -73,8 +115,9 @@ def main() -> None:
     merged.to_parquet(out_path, index=False)
 
     print(f"Saved merged dataset to {out_path}")
-    print("Columns:")
-    print(merged.columns.tolist())
+    print("Rows with missing population by borough:")
+    if "borough" in merged.columns:
+        print(merged[merged["population"].isna()].groupby("borough").size())
     print(merged.head())
 
 

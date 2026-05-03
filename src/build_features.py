@@ -8,7 +8,7 @@ from config import RAW_311_FILE, FEATURE_FILE
 def add_repeat_flags(df: pd.DataFrame) -> pd.DataFrame:
     """Flag repeated complaint descriptors within the same geography-month.
 
-    This is a simple first-pass proxy, not a canonical measure of repeat incidents.
+    This is a simple MVP/proto, not a canonical measure of repeat incidents.
     """
     df = df.copy()
     key_cols = ["month", "borough", "community_board", "complaint_type", "descriptor"]

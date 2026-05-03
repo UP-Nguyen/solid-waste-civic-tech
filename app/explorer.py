@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import copy
@@ -96,6 +95,10 @@ def prepare_dashboard_frames(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         agg_dict["complaints_per_1000"] = ("complaints_per_1000", "mean")
     if "repeat_descriptor_per_1000" in grouped.columns:
         agg_dict["repeat_descriptor_per_1000"] = ("repeat_descriptor_per_1000", "mean")
+    if "population" in grouped.columns:
+        agg_dict["population"] = ("population", "first")
+    if "median_income" in grouped.columns:
+        agg_dict["median_income"] = ("median_income", "first")
 
     finest = grouped.groupby(["month", "borough", "community_board", "complaint_type"], as_index=False).agg(**agg_dict)
     by_district = finest.groupby(["month", "borough", "community_board"], as_index=False).agg(**agg_dict)
@@ -104,9 +107,6 @@ def prepare_dashboard_frames(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     if demo_cols:
         demo_df = grouped.groupby(["month", "borough", "community_board"], as_index=False)[demo_cols].mean()
         by_district = by_district.merge(demo_df, on=["month", "borough", "community_board"], how="left")
-    if "population" in grouped.columns:
-        pop_df = grouped.groupby(["month", "borough", "community_board"], as_index=False)["population"].mean()
-        by_district = by_district.merge(pop_df, on=["month", "borough", "community_board"], how="left")
 
     by_district = add_boro_cd(by_district)
     by_district = by_district[by_district["boro_cd"].notna()].copy()
@@ -192,10 +192,6 @@ def build_bayes_map_figure(bayes_df: pd.DataFrame, geojson: dict, focused_month:
     month_slice = bayes_df[bayes_df["month"] == focused_month].copy()
     if month_slice.empty:
         return None
-    label_map = {
-        "predicted_complaints": "Predicted burden (posterior median)",
-        "prediction_interval_width": "Prediction uncertainty (p90 - p10)",
-    }
     fig = px.choropleth_mapbox(
         month_slice,
         geojson=geojson,
@@ -215,108 +211,18 @@ def build_bayes_map_figure(bayes_df: pd.DataFrame, geojson: dict, focused_month:
         mapbox_style="carto-darkmatter",
         zoom=9.3,
         center={"lat": 40.7128, "lon": -74.0060},
-        opacity=0.75,
-        title=f"{label_map.get(map_metric, map_metric)} — {focused_month}",
+        opacity=0.78,
+        title=None,
     )
-    fig.update_coloraxes(
-        colorbar=dict(
-            thickness=14,
-            len=0.72,
-            y=0.5,
-        )
-    )
-    fig.update_layout(
-    height=620,
-    margin=dict(l=0, r=0, t=48, b=0),
-)
+    fig.update_coloraxes(colorbar=dict(thickness=16, len=0.78, y=0.48))
+    fig.update_layout(height=700, margin=dict(l=0, r=0, t=8, b=0))
     return fig
-
-
-def available_demo_cols(df: pd.DataFrame) -> list[str]:
-    return [c for c in DEMOGRAPHIC_LABELS if c in df.columns]
-
-
-def build_demo_overview(filtered_overview: pd.DataFrame, demo_col: str) -> pd.DataFrame:
-    if demo_col not in filtered_overview.columns:
-        return pd.DataFrame()
-    cols = ["month", "borough", "community_board", "boro_cd", "complaints", "complaints_per_1000", demo_col]
-    if "population" in filtered_overview.columns:
-        cols.append("population")
-    demo_df = filtered_overview[[c for c in cols if c in filtered_overview.columns]].copy()
-    return demo_df.dropna(subset=[demo_col])
-
-
-def build_demo_map_figure(demo_df: pd.DataFrame, geojson: dict, focused_month: str, demo_col: str):
-    month_slice = demo_df[demo_df["month"] == focused_month].copy()
-    if month_slice.empty:
-        return None
-    fig = px.choropleth_mapbox(
-        month_slice,
-        geojson=geojson,
-        locations="boro_cd",
-        featureidkey="properties.BoroCD",
-        color=demo_col,
-        color_continuous_scale="Viridis",
-        hover_name="community_board",
-        hover_data={demo_col: True, "complaints": True, "complaints_per_1000": ":.2f", "boro_cd": False},
-        mapbox_style="carto-darkmatter",
-        zoom=9.3,
-        center={"lat": 40.7128, "lon": -74.0060},
-        opacity=0.75,
-        title=f"{DEMOGRAPHIC_LABELS.get(demo_col, demo_col)} — {focused_month}",
-    )
-    fig.update_layout(
-    height=620,
-    margin=dict(l=0, r=0, t=48, b=0),
-)
-    return fig
-
-
-def build_demo_scatter(demo_df: pd.DataFrame, demo_col: str):
-    if "complaints_per_1000" not in demo_df.columns:
-        return None
-    size_col = "population" if "population" in demo_df.columns else None
-    fig = px.scatter(
-        demo_df.sort_values("month"),
-        x=demo_col, y="complaints_per_1000", animation_frame="month", color="borough", size=size_col,
-        hover_name="community_board",
-        title=f"Complaints per 1,000 vs {DEMOGRAPHIC_LABELS.get(demo_col, demo_col)}",
-        labels={demo_col: DEMOGRAPHIC_LABELS.get(demo_col, demo_col), "complaints_per_1000": "Complaints per 1,000 residents"},
-    )
-    fig.update_layout(
-    height=620,
-    margin=dict(l=0, r=0, t=48, b=0),
-)
-    return fig
-
-
-def make_overlap_table(filtered_overview: pd.DataFrame, vulnerability_col: str, focused_month: str) -> pd.DataFrame:
-    month_df = filtered_overview[filtered_overview["month"] == focused_month].copy()
-    cols = ["borough", "community_board", "complaints_per_1000", vulnerability_col]
-    extra = [c for c in ["median_income", "poverty_rate", "pct_black", "pct_hispanic", "pct_white", "pct_asian"] if c in month_df.columns]
-    month_df = month_df[list(dict.fromkeys(cols + extra))].dropna(subset=["complaints_per_1000", vulnerability_col]).copy()
-    if month_df.empty:
-        return month_df
-    burden_cut = month_df["complaints_per_1000"].quantile(0.75)
-    if vulnerability_col == "median_income":
-        vuln_cut = month_df["median_income"].quantile(0.25)
-        month_df["overlap_flag"] = np.where(
-            (month_df["complaints_per_1000"] >= burden_cut) & (month_df["median_income"] <= vuln_cut),
-            "High burden + low income", "Other"
-        )
-    else:
-        vuln_cut = month_df[vulnerability_col].quantile(0.75)
-        month_df["overlap_flag"] = np.where(
-            (month_df["complaints_per_1000"] >= burden_cut) & (month_df[vulnerability_col] >= vuln_cut),
-            "High burden + high vulnerability", "Other"
-        )
-    return month_df.sort_values(["overlap_flag", "complaints_per_1000"], ascending=[False, False])
 
 
 def main() -> None:
     st.set_page_config(page_title="NYC Sanitation Burden Explorer", layout="wide")
     st.title("NYC Sanitation Burden Explorer")
-    st.caption("Explorer for sanitation-related 311 burden across NYC community districts, with demographic context and Bayesian prediction.")
+    st.caption("Explorer for sanitation-related 311 burden across NYC community districts.")
 
     try:
         df = load_dashboard_data()
@@ -335,7 +241,6 @@ def main() -> None:
     type_trend = frames["type_trend"]
 
     has_demo = "complaints_per_1000" in overview.columns
-    demo_cols = available_demo_cols(overview)
     months = sorted(finest["month"].dropna().unique(), key=month_sort_key)
     complaint_opts = sorted(finest["complaint_type"].dropna().unique())
     borough_opts = sorted(finest["borough"].dropna().unique())
@@ -344,7 +249,7 @@ def main() -> None:
     sel_types = st.sidebar.multiselect("Complaint types", complaint_opts, default=complaint_opts)
     sel_boroughs = st.sidebar.multiselect("Boroughs", borough_opts, default=borough_opts)
     sel_months = st.sidebar.select_slider("Month range", options=months, value=(months[0], months[-1]))
-    sel_focused = st.sidebar.selectbox("Focused month (maps)", options=months, index=len(months) - 1)
+    sel_focused = st.sidebar.selectbox("Focused month", options=months, index=len(months) - 1)
 
     metric_opts = ["complaints", "repeat_descriptor_complaints", "open_cases", "avg_response_hours"]
     if has_demo:
@@ -385,10 +290,7 @@ def main() -> None:
     c3.metric("Complaints (range)", f"{total_complaints:,}")
     c4.metric("Repeat share", f"{(total_repeat / max(total_complaints, 1)) * 100:.1f}%")
 
-    st.header("Spatial Overview")
-    st.caption("The observed burden map comes first, followed by the Bayesian model-based view for the same focused month.")
-
-    st.subheader("Observed Burden Map")
+    st.header("Observed Burden Map")
     try:
         geojson = load_community_district_geojson()
         map_html = build_single_month_map(geojson, filtered_overview, metric, sel_focused, global_min, global_max)
@@ -396,18 +298,16 @@ def main() -> None:
     except FileNotFoundError as e:
         st.info(str(e))
 
-    st.subheader("Bayesian Map")
-    if bayes_filtered is None or bayes_filtered.empty:
-        st.info("Run src/predict_bayesian_model.py to enable Bayesian maps.")
-    else:
+    st.header("Bayesian Map")
+    st.caption("Model-based view for the same focused month. Toggle between predicted burden and uncertainty.")
+    if bayes_filtered is not None and not bayes_filtered.empty:
         bayes_map_metric = st.radio(
             "Bayesian map view",
             ["predicted_complaints", "prediction_interval_width"],
             horizontal=True,
             format_func=lambda x: "Predicted burden" if x == "predicted_complaints" else "Prediction uncertainty",
-            key="bayes_map_stacked_full",
+            key="bayes_map_stacked",
         )
-        st.caption("Model-based view for the same focused month. Toggle between predicted burden and prediction uncertainty.")
         try:
             geojson = load_community_district_geojson()
             fig_bayes_map = build_bayes_map_figure(bayes_filtered, geojson, sel_focused, bayes_map_metric)
@@ -415,6 +315,8 @@ def main() -> None:
                 st.plotly_chart(fig_bayes_map, use_container_width=True)
         except FileNotFoundError as e:
             st.info(str(e))
+    else:
+        st.info("Run src/predict_bayesian_model.py to enable Bayesian maps.")
 
     rank1, rank2 = st.columns(2)
     with rank1:
@@ -426,7 +328,10 @@ def main() -> None:
         ranking["label"] = ranking["community_board"] + " (" + ranking["borough"] + ")"
         fig_rank = px.bar(
             ranking.sort_values(metric, ascending=True),
-            x=metric, y="label", orientation="h", color="borough",
+            x=metric,
+            y="label",
+            orientation="h",
+            color="borough",
             labels={"label": "Community district", metric: format_metric_label(metric)},
             title=f"Observed burden — {sel_focused}",
         )
@@ -444,15 +349,73 @@ def main() -> None:
             latest_pred = latest_pred.sort_values("predicted_complaints", ascending=False).head(12)
             fig_top_pred = px.bar(
                 latest_pred.sort_values("predicted_complaints", ascending=True),
-                x="predicted_complaints", y="community_board", orientation="h", color="borough",
+                x="predicted_complaints",
+                y="community_board",
+                orientation="h",
+                color="borough",
                 title=f"Predicted burden — {sel_focused}",
                 labels={"predicted_complaints": "Predicted complaints (posterior median)", "community_board": "Community district"},
             )
             fig_top_pred.update_layout(height=480, margin=dict(l=0, r=0, t=48, b=0), showlegend=False)
             st.plotly_chart(fig_top_pred, use_container_width=True)
 
-    st.header("Bayesian Modeling")
+    st.header("Borough Summary")
+    st.caption("These charts aggregate complaints across all community districts in each borough for the focused month.")
 
+    borough_month = filtered_overview[filtered_overview["month"] == sel_focused].copy()
+    if borough_month.empty:
+        borough_month = filtered_overview[filtered_overview["month"] == filtered_overview["month"].max()].copy()
+
+    borough_summary = borough_month.groupby("borough", as_index=False).agg(
+        total_complaints=("complaints", "sum"),
+        total_open_cases=("open_cases", "sum"),
+        total_repeat_complaints=("repeat_descriptor_complaints", "sum"),
+    )
+
+    if "population" in borough_month.columns:
+
+        borough_pop = borough_month.groupby("borough", as_index=False).agg(
+            population=("population", lambda s: s.sum(min_count=1))
+        )
+
+        borough_summary = borough_summary.merge(borough_pop, on="borough", how="left")
+        borough_summary["complaints_per_1000"] = (borough_summary["total_complaints"] / borough_summary["population"]
+        ) * 1000
+
+    bcol1, bcol2 = st.columns(2)
+    with bcol1:
+        fig_borough_total = px.bar(
+            borough_summary.sort_values("total_complaints", ascending=True),
+            x="total_complaints",
+            y="borough",
+            orientation="h",
+            color="borough",
+            title=f"Total complaints by borough — {sel_focused}",
+            labels={"total_complaints": "Total complaints", "borough": "Borough"},
+        )
+        fig_borough_total.update_layout(height=420, margin=dict(l=0, r=0, t=48, b=0), showlegend=False)
+        st.plotly_chart(fig_borough_total, use_container_width=True)
+
+    with bcol2:
+        if "complaints_per_1000" in borough_summary.columns:
+            fig_borough_rate = px.bar(
+                borough_summary.sort_values("complaints_per_1000", ascending=True),
+                x="complaints_per_1000",
+                y="borough",
+                orientation="h",
+                color="borough",
+                title=f"Complaints per 1,000 residents by borough — {sel_focused}",
+                labels={"complaints_per_1000": "Complaints per 1,000", "borough": "Borough"},
+            )
+            fig_borough_rate.update_layout(height=420, margin=dict(l=0, r=0, t=48, b=0), showlegend=False)
+            st.plotly_chart(fig_borough_rate, use_container_width=True)
+        else:
+            st.info("Population data not available, so per-capita borough rates cannot be computed.")
+
+    with st.expander("Show borough summary table"):
+        st.dataframe(borough_summary, use_container_width=True)
+
+    st.header("Bayesian Modeling")
     if bayes_filtered is None or bayes_filtered.empty:
         st.info("Run src/predict_bayesian_model.py to enable Bayesian predictions.")
     else:
@@ -465,12 +428,17 @@ def main() -> None:
             with b1:
                 fig_unc = px.scatter(
                     latest_pred,
-                    x="predicted_complaints", y="prediction_interval_width", color="borough",
-                    hover_name="community_board", size="complaints",
+                    x="predicted_complaints",
+                    y="prediction_interval_width",
+                    color="borough",
+                    hover_name="community_board",
+                    size="complaints",
                     title=f"Predicted burden and uncertainty — {sel_focused}",
-                    labels={"predicted_complaints": "Predicted complaints (posterior median)",
-                            "prediction_interval_width": "Prediction interval width (p90 - p10)",
-                            "complaints": "Observed complaints"},
+                    labels={
+                        "predicted_complaints": "Predicted complaints (posterior median)",
+                        "prediction_interval_width": "Prediction interval width (p90 - p10)",
+                        "complaints": "Observed complaints",
+                    },
                 )
                 fig_unc.update_layout(height=500, margin=dict(l=0, r=0, t=48, b=0))
                 st.plotly_chart(fig_unc, use_container_width=True)
@@ -493,7 +461,10 @@ def main() -> None:
             with m1:
                 st.markdown("#### How actual complaints compare with the model's expected trend")
                 fig_actual_pred = px.line(
-                    dist_pred, x="month", y=["complaints", "predicted_complaints"], markers=True,
+                    dist_pred,
+                    x="month",
+                    y=["complaints", "predicted_complaints"],
+                    markers=True,
                     title=f"{pred_sel_dist}: model fit over time",
                     labels={"value": "Complaints", "variable": "Series"},
                 )
@@ -503,7 +474,9 @@ def main() -> None:
             with m2:
                 st.markdown("#### Prediction interval")
                 fig_band = px.line(
-                    dist_pred, x="month", y=["predicted_complaints_p10", "predicted_complaints_p90"],
+                    dist_pred,
+                    x="month",
+                    y=["predicted_complaints_p10", "predicted_complaints_p90"],
                     title=f"{pred_sel_dist}: expected range",
                     labels={"value": "Predicted complaints", "variable": "Interval bound"},
                 )
@@ -519,16 +492,25 @@ def main() -> None:
             open_cases=("open_cases", "sum"),
             repeat_descriptor_complaints=("repeat_descriptor_complaints", "sum"),
         )
-        fig_city = px.line(city, x="month", y=["complaints", "repeat_descriptor_complaints", "open_cases"], markers=True,
-                           title=f"Monthly burden ({sel_months[0]} to {sel_months[1]})",
-                           labels={"value": "Count", "variable": "Metric"})
+        fig_city = px.line(
+            city,
+            x="month",
+            y=["complaints", "repeat_descriptor_complaints", "open_cases"],
+            markers=True,
+            title=f"Monthly burden ({sel_months[0]} to {sel_months[1]})",
+            labels={"value": "Count", "variable": "Metric"},
+        )
         fig_city.update_layout(height=360, margin=dict(l=0, r=0, t=48, b=0))
         st.plotly_chart(fig_city, use_container_width=True)
 
     with t2:
-        st.subheader("Complaint Mix Over Time")
-        fig_mix = px.area(filtered_type, x="month", y="complaints", color="complaint_type",
-                          title=f"Complaint types ({sel_months[0]} to {sel_months[1]})")
+        fig_mix = px.area(
+            filtered_type,
+            x="month",
+            y="complaints",
+            color="complaint_type",
+            title=f"Complaint types ({sel_months[0]} to {sel_months[1]})",
+        )
         fig_mix.update_layout(height=360, margin=dict(l=0, r=0, t=48, b=0))
         st.plotly_chart(fig_mix, use_container_width=True)
 

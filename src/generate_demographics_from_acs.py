@@ -13,11 +13,8 @@ Notes
 - NYC PUMAs generally approximate Community Districts, but they are not a
   perfect one-to-one match everywhere. Some ACS PUMAs represent combined
   community districts (for example, "Districts 1 & 2").
-- For combined districts, this script duplicates the same ACS demographic row
-  to each referenced community board and adds a note column so we can keep the 
-  caveat visible
-- Percent variables are returned by the Census API as percentages from 0 to 100;
-  this script converts them to proportions from 0 to 1 to match the dashboard's
+- For combined districts, this script duplicates the same ACS demographic row to each referenced community board and adds a note column so we can keep the  caveat visible
+- Percent variables are returned by the Census API as percentages from 0 to 100. We convert them to proportions from 0 to 1 to match the dashboard's
   expected convention.
 """
 
@@ -44,7 +41,8 @@ ACS_VARIABLES = {
 }
 
 BOROUGH_BY_PUMA_PREFIX = {
-    "038": "MANHATTAN",
+    "038": "MANHATTAN",   # needed backward compatibility
+    "041": "MANHATTAN",   # needed for current ACS/PUMA coding
     "042": "BRONX",
     "043": "BROOKLYN",
     "044": "QUEENS",
@@ -70,7 +68,6 @@ def fetch_acs_profile() -> pd.DataFrame:
 
 
 def extract_cd_numbers(name: str) -> list[int]:
-    # Examples handled:
     # "NYC-Bronx Community District 12--Wakefield ..."
     # "NYC-Bronx Community Districts 1 & 2--Melrose ..."
     # "NYC-Manhattan Community Districts 4 & 5--Chelsea ..."
@@ -122,7 +119,7 @@ def expand_to_community_boards(df: pd.DataFrame) -> pd.DataFrame:
     for col in ACS_VARIABLES:
         out[col] = pd.to_numeric(out[col], errors="coerce")
 
-    # Convert percentages to proportions expected by your merge/demo code.
+    # Convert percentages to proportions
     pct_cols = ["poverty_rate", "pct_hispanic", "pct_white", "pct_black", "pct_asian"]
     for col in pct_cols:
         out[col] = out[col] / 100.0

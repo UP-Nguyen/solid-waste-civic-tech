@@ -1,6 +1,10 @@
 # solid-waste-civic-tech
 Combined project for CUSP Spring 2026 Civic Analytics and Applied Data Science
 
+
+# NYC Open Data 311 endpoint (2020-present)
+BASE_311_URL = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
+
 Version 1:
 Question:
 Which NYC neighborhoods have persistent sanitation-related complaint burden, and how does that compare with neighborhood context?
