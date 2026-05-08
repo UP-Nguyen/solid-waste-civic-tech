@@ -299,7 +299,7 @@ def main() -> None:
         st.info(str(e))
 
     st.header("Bayesian Map")
-    st.caption("Model-based view for the same focused month. Toggle between predicted burden and uncertainty.")
+    st.caption("Model-based view for the same focused month.")
     if bayes_filtered is not None and not bayes_filtered.empty:
         bayes_map_metric = st.radio(
             "Bayesian map view",
